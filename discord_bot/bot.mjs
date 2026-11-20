@@ -60,7 +60,7 @@ client.on(Events.VoiceStateUpdate, (before, after) => voice.updateState(before, 
 client.on(Events.MessageCreate, async (message) => {
   if (message.guildId !== guildId || message.author.bot || message.webhookId || !assist.available) return
   const mention = new RegExp('<@!?' + client.user.id + '>')
-  const name = /^(?:(?:salut|bonjour|bonsoir|hey|coucou)[\s,]+)?glados(?=$|[\s,.!?:;…—-])/iu
+  const name = /(?<![\p{L}\p{N}_])glados(?![\p{L}\p{N}_])/iu
   const addressedByName = options.natural_text_triggers && name.test(message.content)
   const mentioned = mention.test(message.content)
   const key = message.channelId + ':' + message.author.id
@@ -68,6 +68,7 @@ client.on(Events.MessageCreate, async (message) => {
   const history = previous?.expires > Date.now() ? previous.history : []
   if (previous && !history.length) textSessions.delete(key)
 
+  const hasImage = message.attachments.some((attachment) => attachment.contentType?.startsWith('image/'))
   let direct = addressedByName || mentioned
   if (!direct && options.natural_text_triggers && message.reference?.messageId) {
     const referenced = await message.fetchReference().catch(() => null)
@@ -78,7 +79,7 @@ client.on(Events.MessageCreate, async (message) => {
   if (pendingMessages.has(key) || pendingMessages.size >= 4) return
 
   const text = message.content.replace(mention, '').trim()
-  const input = (addressedByName ? text.replace(name, '').replace(/^[\s,.!?:;…—-]+/u, '') : text).trim().slice(0, 1600)
+  const input = text.slice(0, 1600)
   if (!direct && !input && !message.attachments.size) return
 
   pendingMessages.add(key)
@@ -86,9 +87,10 @@ client.on(Events.MessageCreate, async (message) => {
   showTyping()
   const typing = setInterval(showTyping, 8000)
   try {
-    const prompt = input || (message.attachments.size ? 'Regarde ce que je viens de joindre.' : 'GLaDOS, tu es là ?')
+    const imageOnly = hasImage && (!input || /^glados[\s,.!?:;…—-]*$/iu.test(input))
+    const prompt = imageOnly ? 'Regarde cette image. Décris ce que tu vois.' : input || 'GLaDOS, tu es là ?'
     const decision = await withDiscordImages(message.attachments, async (images) => (
-      direct ? { text: await assist.reply(prompt, history, undefined, images) }
+      direct || (imageOnly && images.length) ? { text: await assist.reply(prompt, history, undefined, images) }
         : await assist.respondInContext(prompt, history, images)
     ))
     if (!decision) return
@@ -101,7 +103,11 @@ client.on(Events.MessageCreate, async (message) => {
     ])
   } catch {
     console.error('Échec du traitement de la conversation Discord.')
-    if (direct) await message.reply('Un petit incident de laboratoire. Réessaie dans un instant.').catch(() => {})
+    if (hasImage) {
+      await message.reply('Je n’ai pas pu analyser cette image. Le fichier ou le fournisseur IA a refusé le traitement.').catch(() => {})
+    } else if (direct) {
+      await message.reply('Un petit incident de laboratoire. Réessaie dans un instant.').catch(() => {})
+    }
   } finally {
     clearInterval(typing)
     pendingMessages.delete(key)
