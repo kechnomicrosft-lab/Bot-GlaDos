@@ -78,6 +78,29 @@ client.on(Events.MessageCreate, (message) => {
   channelQueues.set(key, next)
 })
 
+const voiceJoinPhrase = /^(?:viens|rejoins(?:[- ]moi)?)(?:\s+(?:en|dans le))?\s+voc(?:al)?\s*[.!?…]*$/iu
+
+async function requestVoiceJoin(guild, userId, notify, edit) {
+  const channel = guild.voiceStates.cache.get(userId)?.channel
+  if (!assist.available || !assist.canTranscribe || channel?.type !== ChannelType.GuildVoice || voice.owner) {
+    const problem = !assist.available || !assist.canTranscribe ? 'Configure AI Task et le pipeline Assist.'
+      : voice.owner ? 'Une session vocale est déjà ouverte.'
+        : 'Rejoins un salon vocal et je te rejoindrai.'
+    await notify(problem, true)
+    return
+  }
+
+  await notify('Connexion au vocal. Seule ta voix sera transcrite par le fournisseur STT configuré dans Home Assistant.')
+  try {
+    await voice.join(channel, userId)
+  } catch {
+    console.error('Impossible de rejoindre le salon vocal Discord.')
+    await edit('Je n’ai pas pu rejoindre le vocal. Vérifie mes permissions et les journaux de l’app.')
+    return
+  }
+  await edit('Je suis dans le vocal. Seule ta voix est transcrite par le fournisseur STT configuré dans Home Assistant. Utilise /voc quitter pour arrêter.')
+}
+
 async function processMessage(message) {
   const mention = new RegExp('<@!?' + client.user.id + '>')
   const name = /(?<![\p{L}\p{N}_])glados(?![\p{L}\p{N}_])/iu
@@ -99,6 +122,18 @@ async function processMessage(message) {
     referenced = await message.fetchReference().catch(() => null)
     direct = referenced?.author.id === client.user.id
     if (!direct && !analyzeServerMessages) return
+  }
+  const voiceRequest = message.content.replace(mention, '').trim()
+    .replace(/^glados[\s,!:]+|[\s,]+glados[.!?…]*$/giu, '').trim()
+  if (readMessageContent && voiceJoinPhrase.test(voiceRequest) &&
+      (!message.reference || mentioned || referenced?.author.id === client.user.id) &&
+      !message.mentions.users.some((user) => user.id !== client.user.id)) {
+    let status
+    await requestVoiceJoin(message.guild, message.author.id,
+      async (content) => { status = await message.reply(content) },
+      (content) => status.edit(content),
+    )
+    return
   }
   if (!analyzeServerMessages && !direct && (!options.natural_text_triggers || !history.length || message.mentions.users.size)) return
   if (!analyzeServerMessages && (pendingMessages.has(userKey) || pendingMessages.size >= 4)) return
@@ -203,18 +238,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return
     }
 
-    const channel = interaction.guild.voiceStates.cache.get(interaction.user.id)?.channel
-    if (!assist.available || !assist.canTranscribe || channel?.type !== ChannelType.GuildVoice || voice.owner) {
-      const problem = !assist.available || !assist.canTranscribe ? 'Configure AI Task et le pipeline Assist.'
-        : voice.owner ? 'Une session vocale est déjà ouverte.'
-          : 'Rejoins d’abord un salon vocal classique.'
-      await interaction.reply({ content: problem, ephemeral: true })
-      return
-    }
-
-    await interaction.reply('Connexion au vocal. Seule ta voix sera transcrite par le fournisseur STT configuré dans Home Assistant.')
-    await voice.join(channel, interaction.user.id)
-    await interaction.editReply('Je suis dans le vocal. Seule ta voix est transcrite par le fournisseur STT configuré dans Home Assistant. Utilise /voc quitter pour arrêter.')
+    await requestVoiceJoin(interaction.guild, interaction.user.id,
+      (content, ephemeral = false) => interaction.reply({ content, ephemeral }),
+      (content) => interaction.editReply(content),
+    )
   } catch {
     console.error('Échec de /' + interaction.commandName + '.')
     const content = 'Le test a échoué. Les journaux de l’app donneront la prochaine piste.'

@@ -35,3 +35,4 @@ Active `analyze_server_messages` pour demander à AI Task si chaque nouveau mess
 | `personality` | Consigne de style personnalisée. Vide : personnalité GLaDOS par défaut. |
 | `tts_entity`, `tts_language`, `tts_voice` | Moteur, langue et voix de synthèse. La voix peut être laissée vide pour utiliser celle du moteur. |
 `conversation_timezone` définit le fuseau IANA utilisé pour interpréter les heures des messages, par exemple `Europe/Paris`. En analyse continue, les échanges avec chaque personne restent disponibles séparément du contexte du salon, dans la limite de `context_minutes` et `context_entries`. Une réponse Discord peut aussi fournir le message cité comme contexte.
+Quand le bot lit le contenu des messages, « viens voc » ou « GLaDOS, viens en vocal » lui demande de rejoindre le salon vocal de la personne qui écrit. Elle annonce la transcription avant de rejoindre. La commande `/voc rejoindre` reste disponible et `/voc quitter` termine la session.
