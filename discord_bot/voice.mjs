@@ -54,10 +54,10 @@ export function createVoice(assist) {
       const text = await assist.transcribe(pcm, signal)
       if (!text) return
       stage = 'conversation'
-      const reply = await assist.reply(text, active.conversationId, signal)
-      active.conversationId = reply.conversationId
+      const reply = await assist.reply(text, active.history, signal)
+      active.history = [...active.history, { role: 'user', text }, { role: 'assistant', text: reply }].slice(-6)
       stage = 'TTS Piper'
-      const sound = await assist.synthesize(reply.speech, signal)
+      const sound = await assist.synthesize(reply, signal)
 
       signal.throwIfAborted()
       stage = 'lecture Discord'
@@ -95,7 +95,7 @@ export function createVoice(assist) {
         channelId: channel.id, guildId: channel.guild.id,
         adapterCreator: channel.guild.voiceAdapterCreator, selfDeaf: false, selfMute: false,
       })
-      const active = { channel, owner, player, connection, abort: new AbortController(), ready: false, busy: false }
+      const active = { channel, owner, player, connection, abort: new AbortController(), ready: false, busy: false, history: [] }
       session = active
       player.on('error', () => console.error('Erreur du lecteur vocal Discord.'))
       connection.on('error', () => {

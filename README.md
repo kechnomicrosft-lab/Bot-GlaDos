@@ -6,7 +6,7 @@ Bot Discord auto-hébergé pour Home Assistant OS (amd64 et aarch64). Il répond
 
 1. Dans **Paramètres → Applications → Installer une application → Dépôts**, ajoute `https://github.com/kechnomicrosft-lab/Bot-GlaDos`.
 2. Installe **Discord Bot Host**. Configure `discord_token` avec le jeton du bot et `guild_id` avec l’identifiant du serveur Discord. Invite le bot sur ce serveur.
-3. Pour la conversation, renseigne les identifiants personnels Discord autorisés dans `allowed_discord_users` (séparés par des virgules). Une liste vide bloque la conversation et le vocal. Configure ensuite `conversation_agent` avec l’identifiant d’un agent dédié dans Home Assistant. Désactive le contrôle des appareils sur cet agent. Exemple de consigne : « Réponds naturellement en français, avec un humour sec et un sarcasme mesuré. Fais court à l’oral. »
+3. Renseigne les identifiants Discord autorisés dans `allowed_discord_users` (séparés par des virgules). Une liste vide bloque la conversation et le vocal. Renseigne `ai_task_entity` avec une entité de génération de texte, par exemple `ai_task.google_ai_task`. Discord utilise AI Task sans outils domotiques. Le pipeline vocal sert uniquement à la transcription. Ton agent Assist habituel reste disponible pour la maison.
 4. Pour le vocal, renseigne `assist_pipeline` avec l’identifiant d’un pipeline doté d’un moteur STT. Le TTS utilise `tts.piper` et requiert la voix `fr_FR-glados-medium` dans Piper. Le bot requiert les permissions Discord **Se connecter** et **Parler** dans le salon vocal.
 5. Démarre l’app, consulte son journal et teste `/ping`, puis `/glados` et `/voc rejoindre`. Si tu migres depuis une installation locale, arrête celle-ci avant de démarrer l’app du dépôt avec le même jeton.
 

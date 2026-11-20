@@ -43,7 +43,7 @@ client.once(Events.ClientReady, async (readyClient) => {
       console.error('Échec de l’enregistrement de /' + command.name + '.')
     }
   }
-  if (!assist.available) console.log('Conversation inactive : renseigne conversation_agent et vérifie l’accès à l’API HA.')
+  if (!assist.available) console.log('Conversation inactive : renseigne ai_task_entity et vérifie l’accès à l’API HA.')
   if (!assist.canTranscribe) console.log('VOC inactif : renseigne assist_pipeline.')
 })
 
@@ -59,7 +59,7 @@ client.on(Events.MessageCreate, async (message) => {
   pendingMessages.add(message.author.id)
   try {
     const response = await assist.reply(input)
-    await message.reply(response.speech)
+    await message.reply(response)
   } catch {
     console.error('Échec de la réponse à une mention Discord.')
     await message.reply('Un petit incident de laboratoire. Réessaie dans un instant.').catch(() => {})
@@ -84,12 +84,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     if (interaction.commandName === 'glados') {
       if (!assist.available) {
-        await interaction.reply({ content: 'Configure l’agent de conversation dans Home Assistant.', ephemeral: true })
+        await interaction.reply({ content: 'Configure une entité AI Task dans Home Assistant.', ephemeral: true })
         return
       }
       await interaction.deferReply()
       const response = await assist.reply(interaction.options.getString('message', true))
-      await interaction.editReply(response.speech)
+      await interaction.editReply(response)
       return
     }
 
@@ -106,7 +106,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     const channel = interaction.guild.voiceStates.cache.get(interaction.user.id)?.channel
     if (!assist.available || !assist.canTranscribe || channel?.type !== ChannelType.GuildVoice || voice.owner) {
-      const problem = !assist.available || !assist.canTranscribe ? 'Configure l’agent et le pipeline Assist.'
+      const problem = !assist.available || !assist.canTranscribe ? 'Configure AI Task et le pipeline Assist.'
         : voice.owner ? 'Une session vocale est déjà ouverte.'
           : 'Rejoins d’abord un salon vocal classique.'
       await interaction.reply({ content: problem, ephemeral: true })

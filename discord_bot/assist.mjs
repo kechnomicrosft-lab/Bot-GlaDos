@@ -1,7 +1,7 @@
 const base = 'http://supervisor/core'
 const websocket = 'ws://supervisor/core/websocket'
 
-export function createAssist({ conversation_agent: agent, assist_pipeline: pipeline }, token) {
+export function createAssist({ ai_task_entity: aiTask, assist_pipeline: pipeline }, token) {
   async function request(path, signal, body, responseType = 'json') {
     const response = await fetch(base + path, {
       method: body ? 'POST' : 'GET',
@@ -15,15 +15,23 @@ export function createAssist({ conversation_agent: agent, assist_pipeline: pipel
   }
 
   return {
-    available: Boolean(token && /^conversation\.[a-z0-9_]+$/.test(agent ?? '') && agent !== 'conversation.home_assistant'),
+    available: Boolean(token && /^ai_task\.[a-z0-9_]+$/.test(aiTask ?? "")),
     canTranscribe: Boolean(pipeline),
-    async reply(text, conversationId, signal) {
-      const result = await request('/api/conversation/process', signal, {
-        text, agent_id: agent, language: 'fr', conversation_id: conversationId ?? undefined,
+    async reply(text, history = [], signal) {
+      const result = await request('/api/services/ai_task/generate_data?return_response', signal, {
+        entity_id: aiTask,
+        task_name: 'GLaDOS Discord chat',
+        instructions: [
+          'Incarne GLaDOS. Réponds naturellement en français, avec un sarcasme mesuré.',
+          'Tu peux discuter uniquement. Pour une demande domotique, indique que tu ne peux pas agir.',
+          'Voici les échanges, avec la dernière demande en fin de liste.',
+          JSON.stringify([...history, { role: 'user', text }]),
+        ].join('\n'),
       })
-      const speech = result.response?.speech?.plain?.speech?.trim()
-      if (!speech || result.response.response_type === 'error') throw new Error('Assist conversation sans réponse')
-      return { speech: speech.slice(0, 1900), conversationId: result.conversation_id }
+      const generated = result.service_response?.data
+      const speech = typeof generated === 'string' ? generated.trim().slice(0, 1900) : ''
+      if (!speech) throw new Error('AI Task sans réponse')
+      return speech
     },
     async synthesize(message, signal) {
       const result = await request('/api/tts_get_url', signal, {
