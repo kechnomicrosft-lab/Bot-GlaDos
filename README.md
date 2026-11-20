@@ -34,3 +34,4 @@ Active `analyze_server_messages` pour demander à AI Task si chaque nouveau mess
 | `context_minutes`, `context_entries` | Durée et taille maximale du contexte récent pour les messages texte. |
 | `personality` | Consigne de style personnalisée. Vide : personnalité GLaDOS par défaut. |
 | `tts_entity`, `tts_language`, `tts_voice` | Moteur, langue et voix de synthèse. La voix peut être laissée vide pour utiliser celle du moteur. |
+`conversation_timezone` définit le fuseau IANA utilisé pour interpréter les heures des messages, par exemple `Europe/Paris`. En analyse continue, les échanges avec chaque personne restent disponibles séparément du contexte du salon, dans la limite de `context_minutes` et `context_entries`. Une réponse Discord peut aussi fournir le message cité comme contexte.

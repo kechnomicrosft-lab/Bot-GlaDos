@@ -1,5 +1,5 @@
 name: "Discord Bot Host"
-version: "0.2.10"
+version: "0.2.11"
 slug: discord_bot
 description: "Bot Discord avec conversation et voix GLaDOS via Home Assistant."
 arch:
@@ -29,6 +29,7 @@ options:
   tts_entity: "tts.piper"
   tts_language: "fr"
   tts_voice: "fr_FR-glados-medium"
+  conversation_timezone: UTC
 schema:
   discord_token: password
   guild_id: str
@@ -46,3 +47,4 @@ schema:
   tts_entity: str
   tts_language: str
   tts_voice: str?
+  conversation_timezone: str

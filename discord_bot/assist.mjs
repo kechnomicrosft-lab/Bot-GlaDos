@@ -28,7 +28,7 @@ export function createAssist({
   return {
     available: Boolean(token && /^ai_task\.[a-z0-9_]+$/.test(aiTask ?? "")),
     canTranscribe: Boolean(pipeline),
-    async reply(text, history = [], signal, attachments = []) {
+    async reply(text, history = [], signal, attachments = [], routing = {}) {
       const result = await request('/api/services/ai_task/generate_data?return_response', signal, {
         entity_id: aiTask,
         ...(attachments.length ? { attachments } : {}),
@@ -36,8 +36,8 @@ export function createAssist({
         instructions: [
           style,
           'Tu peux discuter uniquement. Pour une demande domotique, indique que tu ne peux pas agir.',
-          'Voici les échanges, avec la dernière demande en fin de liste.',
-          JSON.stringify([...history, { role: 'user', text }]),
+          'Appuie ta réponse sur les échanges précédents. Utilise les heures locales et les délais pour interpréter les références au temps.',
+          JSON.stringify({ exchangeWithSpeaker: history, latest: { role: 'user', text, ...routing } }),
         ].join('\n'),
       })
       const generated = result.service_response?.data
@@ -52,7 +52,10 @@ export function createAssist({
         task_name: 'GLaDOS Discord follow-up',
         instructions: [
           'Tu incarnes GLaDOS dans Discord. Décide à qui le dernier message est adressé.',
-          'Le contexte peut contenir plusieurs personnes. Distingue leurs échanges des messages réellement destinés à GLaDOS.',
+          'Lis le dernier message avec exchangeWithSpeaker et channelHistory avant de décider. exchangeWithSpeaker contient les échanges récents entre toi et cette personne. channelHistory donne le contexte des autres messages dans le même salon.',
+          'Une relance elliptique, un pronom ou une taquinerie dans les secondes qui suivent ta réponse à la même personne peut poursuivre la discussion sans mention. Utilise les heures locales et secondsBeforeMessage pour évaluer le délai. Après une longue pause, demande un indice plus clair.',
+          'Si repliedTo désigne une autre personne, considère en priorité que cette personne est la destinataire. Ne réponds pas simplement parce que ton nom est cité à la troisième personne.',
+          'Pour répondre, tiens compte des faits et demandes des tours précédents. Ne recommence pas la discussion à zéro.',
           'Réponds aux sollicitations claires, aux suites de ton échange et aux images qui te sont adressées. Ignore le bavardage entre humains.',
           'Le signal addressed indique une mention explicite ou une réponse Discord à ton message. Si ce signal est vrai, réponds ou réagis.',
           'Exemple : après ta réponse, "je te débrancherai un jour" te vise. Si le message parle à quelqu’un d’autre ou reste ambigu, ignore-le.',
@@ -62,7 +65,7 @@ export function createAssist({
           allowEmoji ? '' : 'Réponds en texte ou ignore le message. Ne choisis jamais une réaction emoji.',
           'Retourne uniquement un objet JSON : {"action":"ignore"}, {"action":"react","emoji":"🙄"} ou {"action":"reply","text":"..."}',
           'Réactions autorisées : 🙄, 😏, 👀, 😂, 🤨, 👍.',
-          JSON.stringify({ history, latest: { role: 'user', text, ...routing } }),
+          JSON.stringify({ exchangeWithSpeaker: history, latest: { role: 'user', text, ...routing } }),
         ].join('\n'),
       })
       const raw = result.service_response?.data

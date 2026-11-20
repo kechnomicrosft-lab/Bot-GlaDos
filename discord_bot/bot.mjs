@@ -3,6 +3,7 @@ import { ChannelType, Client, Events, GatewayIntentBits, Routes } from 'discord.
 import { createAssist } from './assist.mjs'
 import { createVoice } from './voice.mjs'
 import { withDiscordImages } from './images.mjs'
+import { createTextContext } from './text-context.mjs'
 
 const options = JSON.parse(await readFile('/data/options.json', 'utf8'))
 const token = options.discord_token?.trim()
@@ -26,18 +27,14 @@ const client = new Client({
 })
 const pendingMessages = new Set()
 const channelQueues = new Map()
-const channelSessions = new Map()
-const textSessions = new Map()
-const sessionDuration = (options.context_minutes ?? 3) * 60 * 1000
-const contextEntries = options.context_entries ?? 6
+const context = createTextContext({
+  minutes: options.context_minutes,
+  entries: options.context_entries,
+  timeZone: options.conversation_timezone,
+})
 const textChannels = new Set((options.text_channel_ids ?? '').split(/[\s,]+/).filter(Boolean))
 const acceptsText = (channelId, parentId) => !textChannels.size || textChannels.has(channelId) || textChannels.has(parentId)
 
-function rememberSession(sessions, key, history) {
-  sessions.delete(key)
-  sessions.set(key, { history: history.slice(-contextEntries), expires: Date.now() + sessionDuration })
-  if (sessions.size > 256) sessions.delete(sessions.keys().next().value)
-}
 const commands = [
   { name: 'ping', description: 'Vérifie que le bot répond.' },
   { name: 'glados', description: 'Parle à GLaDOS.', options: [
@@ -86,27 +83,31 @@ async function processMessage(message) {
   const name = /(?<![\p{L}\p{N}_])glados(?![\p{L}\p{N}_])/iu
   const addressedByName = readMessageContent && name.test(message.content)
   const mentioned = mention.test(message.content)
-  const key = analyzeServerMessages ? message.channelId : message.channelId + ':' + message.author.id
-  const sessions = analyzeServerMessages ? channelSessions : textSessions
-  const previous = sessions.get(key)
-  const history = previous?.expires > Date.now() ? previous.history : []
-  if (previous && !history.length) sessions.delete(key)
-
+  const timestamp = message.createdTimestamp
+  const userKey = 'user:' + message.channelId + ':' + message.author.id
+  const channelKey = 'channel:' + message.channelId
+  const exchange = context.history(userKey, timestamp)
+  const exchangedIds = new Set(exchange.map((turn) => turn.id))
+  const channel = analyzeServerMessages
+    ? context.history(channelKey, timestamp).filter((turn) => !exchangedIds.has(turn.id))
+    : []
+  const history = exchange.map((turn) => context.describe(turn, timestamp, message.author.id))
   const hasImage = message.attachments.some((attachment) => attachment.contentType?.startsWith('image/'))
   let direct = mentioned || (!analyzeServerMessages && addressedByName)
+  let referenced
   if (!direct && readMessageContent && message.reference?.messageId) {
-    const referenced = await message.fetchReference().catch(() => null)
+    referenced = await message.fetchReference().catch(() => null)
     direct = referenced?.author.id === client.user.id
     if (!direct && !analyzeServerMessages) return
   }
   if (!analyzeServerMessages && !direct && (!options.natural_text_triggers || !history.length || message.mentions.users.size)) return
-  if (!analyzeServerMessages && (pendingMessages.has(key) || pendingMessages.size >= 4)) return
+  if (!analyzeServerMessages && (pendingMessages.has(userKey) || pendingMessages.size >= 4)) return
 
   const text = message.content.replace(mention, '').trim()
   const input = text.slice(0, 1600)
   if (!analyzeServerMessages && !direct && !input && !message.attachments.size) return
 
-  if (!analyzeServerMessages) pendingMessages.add(key)
+  if (!analyzeServerMessages) pendingMessages.add(userKey)
   const showTyping = () => void message.channel.sendTyping().catch(() => {})
   const showWhileWaiting = direct || addressedByName || !analyzeServerMessages
   if (options.show_typing !== false && showWhileWaiting) showTyping()
@@ -118,22 +119,39 @@ async function processMessage(message) {
     const prompt = options.analyze_images === false && hasImage
       ? caption + ' [Une image est jointe. Son analyse est désactivée.]'
       : caption
-    const routing = { addressed: direct, author: message.author.displayName }
-    const turn = { role: 'user', text: prompt, ...(analyzeServerMessages ? { author: routing.author } : {}) }
+    const speaker = { name: message.author.displayName, id: message.author.id }
+    const turn = { id: message.id, role: 'user', text: prompt, speaker, timestamp, hasImage }
+    const routing = {
+      addressed: direct,
+      mentionsGladosByName: addressedByName,
+      speaker: speaker.name,
+      time: context.describe(turn, timestamp).time,
+      timeZone: context.timeZone,
+      repliedTo: referenced ? {
+        role: referenced.author.id === client.user.id ? 'assistant' : 'user',
+        speaker: referenced.author.displayName,
+        text: referenced.content.slice(0, 1000),
+        time: context.describe({ timestamp: referenced.createdTimestamp }, timestamp).time,
+      } : undefined,
+      channelHistory: channel.map((entry) => context.describe(entry, timestamp, message.author.id)),
+    }
+    if (analyzeServerMessages) context.remember(channelKey, timestamp, turn)
+
     const decision = await withDiscordImages(options.analyze_images === false ? new Map() : message.attachments, async (images) => {
       if (analyzeServerMessages) return assist.respondInContext(prompt, history, images, routing)
-      if (direct || (imageOnly && images.length)) return { text: await assist.reply(prompt, history, undefined, images) }
-      return assist.respondInContext(prompt, history, images)
+      if (direct || (imageOnly && images.length)) return { text: await assist.reply(prompt, history, undefined, images, routing) }
+      return assist.respondInContext(prompt, history, images, routing)
     })
-    if (analyzeServerMessages) rememberSession(sessions, key, [...history, turn])
     if (!decision) return
-    if (decision.emoji) await message.react(decision.emoji)
-    else await message.reply(decision.text)
-    rememberSession(sessions, key, [
-      ...history,
-      turn,
-      { role: 'assistant', text: decision.text ?? decision.emoji },
-    ])
+
+    const posted = decision.emoji ? await message.react(decision.emoji) : await message.reply(decision.text)
+    const response = {
+      id: decision.emoji ? 'reaction:' + message.id : posted.id,
+      role: 'assistant', text: decision.text ?? decision.emoji,
+      recipient: speaker, timestamp: posted.createdTimestamp ?? Date.now(),
+    }
+    context.remember(userKey, timestamp, turn, response)
+    if (analyzeServerMessages) context.remember(channelKey, timestamp, response)
   } catch (error) {
     const code = typeof error?.code === 'string' && /^[A-Za-z0-9_]+$/.test(error.code) ? error.code : null
     const imageError = /^(InvalidDiscordImage(?:Url)?|UnsupportedDiscordImage|DiscordImageTooLarge)$/.test(error?.message)
@@ -146,7 +164,7 @@ async function processMessage(message) {
     }
   } finally {
     clearInterval(typing)
-    pendingMessages.delete(key)
+    pendingMessages.delete(userKey)
   }
 }
 
