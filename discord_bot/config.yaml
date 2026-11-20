@@ -1,0 +1,22 @@
+name: "Discord Bot Host"
+version: "0.2.0"
+image: "ghcr.io/kechnomicrosft-lab/bot-glados"
+slug: discord_bot
+description: "Bot Discord avec conversation et voix GLaDOS via Home Assistant."
+arch:
+  - amd64
+  - aarch64
+startup: application
+boot: auto
+init: false
+homeassistant_api: true
+options:
+  discord_token: ""
+  guild_id: ""
+  conversation_agent: ""
+  assist_pipeline: ""
+schema:
+  discord_token: password
+  guild_id: str
+  conversation_agent: str?
+  assist_pipeline: str?

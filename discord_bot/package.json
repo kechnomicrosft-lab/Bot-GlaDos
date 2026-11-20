@@ -1,0 +1,15 @@
+{
+  "name": "haos-discord-host",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "dependencies": {
+    "discord.js": "14.19.3",
+    "@discordjs/voice": "0.19.2",
+    "opusscript": "0.0.8",
+    "prism-media": "1.3.5"
+  }
+}

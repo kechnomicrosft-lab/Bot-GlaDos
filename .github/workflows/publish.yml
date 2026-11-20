@@ -1,0 +1,57 @@
+name: Build and publish HAOS app
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'discord_bot/**'
+      - '.github/workflows/publish.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: haos-image-main
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: discord_bot
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check Node.js modules
+        run: |
+          npm ci --no-audit --no-fund
+          node --check bot.mjs
+          node --check assist.mjs
+          node --check voice.mjs
+          node --input-type=module -e "import './voice.mjs'; import './assist.mjs'"
+      - name: Read image and version from Home Assistant metadata
+        id: app
+        run: |
+          echo "version=$(sed -nE 's/^version: \"([0-9]+\.[0-9]+\.[0-9]+)\"$/\1/p' config.yaml)" >> "$GITHUB_OUTPUT"
+          echo "image=$(sed -nE 's/^image: \"(ghcr\.io\/[a-z0-9_./-]+)\"$/\1/p' config.yaml)" >> "$GITHUB_OUTPUT"
+      - name: Verify release metadata
+        if: steps.app.outputs.version == '' || steps.app.outputs.image == ''
+        run: exit 1
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./discord_bot
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.app.outputs.image }}:${{ steps.app.outputs.version }}
+          labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
