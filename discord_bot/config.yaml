@@ -1,5 +1,5 @@
 name: "Discord Bot Host"
-version: "0.2.4"
+version: "0.2.5"
 slug: discord_bot
 description: "Bot Discord avec conversation et voix GLaDOS via Home Assistant."
 arch:

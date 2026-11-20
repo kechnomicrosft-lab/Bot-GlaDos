@@ -33,6 +33,37 @@ export function createAssist({ ai_task_entity: aiTask, assist_pipeline: pipeline
       if (!speech) throw new Error('AI Task sans réponse')
       return speech
     },
+    async respondInContext(text, history) {
+      const result = await request('/api/services/ai_task/generate_data?return_response', undefined, {
+        entity_id: aiTask,
+        task_name: 'GLaDOS Discord follow-up',
+        instructions: [
+          'Tu incarnes GLaDOS dans Discord. Décide à qui le dernier message est adressé.',
+          'Le même utilisateur te parlait récemment. Une réponse directe, une référence à ta dernière phrase ou une taquinerie à ton sujet peut continuer la discussion.',
+          'Exemple : après ta réponse, "je te débrancherai un jour" te vise. Si le message parle à quelqu’un d’autre ou reste ambigu, ignore-le.',
+          'Pour une taquinerie qui ne demande rien, tu peux réagir avec un emoji. Sinon, réponds brièvement en français, naturellement, avec un sarcasme mesuré.',
+          'Tu ne peux effectuer aucune action domotique.',
+          'Retourne uniquement un objet JSON : {"action":"ignore"}, {"action":"react","emoji":"🙄"} ou {"action":"reply","text":"..."}',
+          'Réactions autorisées : 🙄, 😏, 👀, 😂, 🤨, 👍.',
+          JSON.stringify([...history, { role: 'user', text }]),
+        ].join('\n'),
+      })
+      const raw = result.service_response?.data
+      if (typeof raw !== 'string') return null
+
+      try {
+        const decision = JSON.parse(raw.trim().replace(/^```(?:json)?\s*|\s*```$/gi, ''))
+        if (decision?.action === 'react' && ['🙄', '😏', '👀', '😂', '🤨', '👍'].includes(decision.emoji)) {
+          return { emoji: decision.emoji }
+        }
+        if (decision?.action === 'reply' && typeof decision.text === 'string' && decision.text.trim()) {
+          return { text: decision.text.trim().slice(0, 1900) }
+        }
+      } catch {
+        // A response without a valid decision leaves the channel silent.
+      }
+      return null
+    },
     async synthesize(message, signal) {
       const result = await request('/api/tts_get_url', signal, {
         engine_id: 'tts.piper', language: 'fr',

@@ -22,6 +22,14 @@ const client = new Client({
   allowedMentions: { parse: [], repliedUser: false },
 })
 const pendingMessages = new Set()
+const textSessions = new Map()
+const sessionDuration = 3 * 60 * 1000
+
+function rememberTextSession(key, history) {
+  textSessions.delete(key)
+  textSessions.set(key, { history: history.slice(-6), expires: Date.now() + sessionDuration })
+  if (textSessions.size > 256) textSessions.delete(textSessions.keys().next().value)
+}
 const commands = [
   { name: 'ping', description: 'Vérifie que le bot répond.' },
   { name: 'glados', description: 'Parle à GLaDOS.', options: [
@@ -54,26 +62,41 @@ client.on(Events.MessageCreate, async (message) => {
   const name = /^(?:(?:salut|bonjour|bonsoir|hey|coucou)[\s,]+)?glados(?=$|[\s,.!?:;…—-])/iu
   const addressedByName = options.natural_text_triggers && name.test(message.content)
   const mentioned = mention.test(message.content)
-  if (!addressedByName && !mentioned) {
-    if (!options.natural_text_triggers || !message.reference?.messageId) return
+  const key = message.channelId + ':' + message.author.id
+  const previous = textSessions.get(key)
+  const history = previous?.expires > Date.now() ? previous.history : []
+  if (previous && !history.length) textSessions.delete(key)
+
+  let direct = addressedByName || mentioned
+  if (!direct && options.natural_text_triggers && message.reference?.messageId) {
     const referenced = await message.fetchReference().catch(() => null)
     if (referenced?.author.id !== client.user.id) return
+    direct = true
   }
-  if (pendingMessages.has(message.author.id) || pendingMessages.size >= 4) return
+  if (!direct && (!options.natural_text_triggers || !history.length || message.mentions.users.size)) return
+  if (pendingMessages.has(key) || pendingMessages.size >= 4) return
 
   const text = message.content.replace(mention, '').trim()
   const input = (addressedByName ? text.replace(name, '').replace(/^[\s,.!?:;…—-]+/u, '') : text).trim().slice(0, 1600)
-    || 'GLaDOS, tu es là ?'
+  if (!direct && !input) return
 
-  pendingMessages.add(message.author.id)
+  pendingMessages.add(key)
   try {
-    const response = await assist.reply(input)
-    await message.reply(response)
+    const prompt = input || 'GLaDOS, tu es là ?'
+    const decision = direct ? { text: await assist.reply(prompt, history) } : await assist.respondInContext(prompt, history)
+    if (!decision) return
+    if (decision.emoji) await message.react(decision.emoji)
+    else await message.reply(decision.text)
+    rememberTextSession(key, [
+      ...history,
+      { role: 'user', text: prompt },
+      { role: 'assistant', text: decision.text ?? decision.emoji },
+    ])
   } catch {
-    console.error('Échec de la réponse à une mention Discord.')
-    await message.reply('Un petit incident de laboratoire. Réessaie dans un instant.').catch(() => {})
+    console.error('Échec du traitement de la conversation Discord.')
+    if (direct) await message.reply('Un petit incident de laboratoire. Réessaie dans un instant.').catch(() => {})
   } finally {
-    pendingMessages.delete(message.author.id)
+    pendingMessages.delete(key)
   }
 })
 

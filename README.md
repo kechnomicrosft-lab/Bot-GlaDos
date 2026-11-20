@@ -18,3 +18,4 @@ Une modification de `discord_bot/` sur `main` lance les contrôles JavaScript et
 ## Parler sans commande
 
 Active **Message Content Intent** dans le portail développeur Discord, section **Bot**, puis active `natural_text_triggers` dans les réglages de Discord Bot Host et redémarre le bot. Écris « GLaDOS, tu en penses quoi ? » ou réponds directement à un message du bot. Les conversations entre humains restent silencieuses. Les mentions directes et les commandes restent disponibles. Tous les membres ayant accès au salon peuvent solliciter le bot.
+Après une réponse du bot, le suivi reste actif trois minutes par personne et par salon. Les messages suivants dans cet échange sont envoyés au fournisseur AI Task avec les derniers tours pour décider de répondre, de réagir ou de garder le silence. Chaque réponse ou réaction prolonge le délai. Les autres conversations ne sont pas transmises à AI Task.
