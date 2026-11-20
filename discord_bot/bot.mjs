@@ -25,7 +25,7 @@ const commands = [
     { type: 3, name: 'message', description: 'Ton message', required: true, max_length: 1600 },
   ] },
   { name: 'voc', description: 'Gère la discussion vocale.', options: [
-    { type: 1, name: 'rejoindre', description: 'Invite GLaDOS et active la transcription de ta voix par le fournisseur STT configuré dans Home Assistant.' },
+    { type: 1, name: 'rejoindre', description: 'Invite GLaDOS dans ton salon et active la transcription de ta voix.' },
     { type: 1, name: 'quitter', description: 'Termine ta session vocale.' },
   ] },
 ]
