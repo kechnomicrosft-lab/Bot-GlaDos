@@ -1,5 +1,5 @@
 name: "Discord Bot Host"
-version: "0.2.9"
+version: "0.2.10"
 slug: discord_bot
 description: "Bot Discord avec conversation et voix GLaDOS via Home Assistant."
 arch:
@@ -19,6 +19,16 @@ options:
   assist_pipeline: ""
   natural_text_triggers: false
   analyze_server_messages: false
+  text_channel_ids: ""
+  show_typing: true
+  allow_emoji_reactions: true
+  analyze_images: true
+  context_minutes: 3
+  context_entries: 6
+  personality: ""
+  tts_entity: "tts.piper"
+  tts_language: "fr"
+  tts_voice: "fr_FR-glados-medium"
 schema:
   discord_token: password
   guild_id: str
@@ -26,3 +36,13 @@ schema:
   assist_pipeline: str?
   natural_text_triggers: bool
   analyze_server_messages: bool
+  text_channel_ids: str?
+  show_typing: bool
+  allow_emoji_reactions: bool
+  analyze_images: bool
+  context_minutes: int(1,30)
+  context_entries: int(2,20)
+  personality: str?
+  tts_entity: str
+  tts_language: str
+  tts_voice: str?

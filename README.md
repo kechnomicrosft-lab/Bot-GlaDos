@@ -23,3 +23,14 @@ GLaDOS affiche son indicateur de saisie pendant le traitement des messages. Pour
 ## Analyse continue du serveur
 
 Active `analyze_server_messages` pour demander à AI Task si chaque nouveau message humain visible par le bot sur le serveur configuré appelle une réponse, une réaction ou le silence. Ce mode requiert **Message Content Intent**. Les messages et les images compatibles sont envoyés au fournisseur IA même lorsque GLaDOS reste silencieuse. Le contexte récent est conservé en mémoire par salon. Limite les permissions Discord du bot aux salons concernés et informe les membres avant activation.
+## Réglages supplémentaires
+
+| Option | Effet |
+| --- | --- |
+| `text_channel_ids` | Identifiants des salons ou catégories autorisés pour le texte, séparés par des virgules. Vide : tous les salons visibles. |
+| `show_typing` | Affiche la saisie quand GLaDOS traite un message qui lui est adressé. |
+| `allow_emoji_reactions` | Autorise les réactions emoji choisies par le modèle. |
+| `analyze_images` | Télécharge et transmet les images compatibles à AI Task. Désactivé, seul le texte est analysé. |
+| `context_minutes`, `context_entries` | Durée et taille maximale du contexte récent pour les messages texte. |
+| `personality` | Consigne de style personnalisée. Vide : personnalité GLaDOS par défaut. |
+| `tts_entity`, `tts_language`, `tts_voice` | Moteur, langue et voix de synthèse. La voix peut être laissée vide pour utiliser celle du moteur. |

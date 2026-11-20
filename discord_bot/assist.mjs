@@ -1,7 +1,13 @@
 const base = 'http://supervisor/core'
 const websocket = 'ws://supervisor/core/websocket'
 
-export function createAssist({ ai_task_entity: aiTask, assist_pipeline: pipeline }, token) {
+export function createAssist({
+  ai_task_entity: aiTask, assist_pipeline: pipeline, personality,
+  allow_emoji_reactions: allowEmoji = true,
+  tts_entity: ttsEntity = 'tts.piper', tts_language: language = 'fr',
+  tts_voice: voice = 'fr_FR-glados-medium',
+}, token) {
+  const style = personality?.trim().slice(0, 1000) || 'Incarne GLaDOS. Réponds naturellement en français, avec un sarcasme mesuré.'
   async function request(path, signal, body, responseType = 'json') {
     const response = await fetch(base + path, {
       method: body ? 'POST' : 'GET',
@@ -28,7 +34,7 @@ export function createAssist({ ai_task_entity: aiTask, assist_pipeline: pipeline
         ...(attachments.length ? { attachments } : {}),
         task_name: 'GLaDOS Discord chat',
         instructions: [
-          'Incarne GLaDOS. Réponds naturellement en français, avec un sarcasme mesuré.',
+          style,
           'Tu peux discuter uniquement. Pour une demande domotique, indique que tu ne peux pas agir.',
           'Voici les échanges, avec la dernière demande en fin de liste.',
           JSON.stringify([...history, { role: 'user', text }]),
@@ -51,7 +57,9 @@ export function createAssist({ ai_task_entity: aiTask, assist_pipeline: pipeline
           'Le signal addressed indique une mention explicite ou une réponse Discord à ton message. Si ce signal est vrai, réponds ou réagis.',
           'Exemple : après ta réponse, "je te débrancherai un jour" te vise. Si le message parle à quelqu’un d’autre ou reste ambigu, ignore-le.',
           'Pour une taquinerie qui ne demande rien, tu peux réagir avec un emoji. Sinon, réponds brièvement en français, naturellement, avec un sarcasme mesuré.',
+          style,
           'Tu ne peux effectuer aucune action domotique.',
+          allowEmoji ? '' : 'Réponds en texte ou ignore le message. Ne choisis jamais une réaction emoji.',
           'Retourne uniquement un objet JSON : {"action":"ignore"}, {"action":"react","emoji":"🙄"} ou {"action":"reply","text":"..."}',
           'Réactions autorisées : 🙄, 😏, 👀, 😂, 🤨, 👍.',
           JSON.stringify({ history, latest: { role: 'user', text, ...routing } }),
@@ -62,7 +70,7 @@ export function createAssist({ ai_task_entity: aiTask, assist_pipeline: pipeline
 
       try {
         const decision = JSON.parse(raw.trim().replace(/^```(?:json)?\s*|\s*```$/gi, ''))
-        if (decision?.action === 'react' && ['🙄', '😏', '👀', '😂', '🤨', '👍'].includes(decision.emoji)) {
+        if (allowEmoji && decision?.action === 'react' && ['🙄', '😏', '👀', '😂', '🤨', '👍'].includes(decision.emoji)) {
           return { emoji: decision.emoji }
         }
         if (decision?.action === 'reply' && typeof decision.text === 'string' && decision.text.trim()) {
@@ -75,8 +83,8 @@ export function createAssist({ ai_task_entity: aiTask, assist_pipeline: pipeline
     },
     async synthesize(message, signal) {
       const result = await request('/api/tts_get_url', signal, {
-        engine_id: 'tts.piper', language: 'fr',
-        options: { voice: 'fr_FR-glados-medium' }, message, cache: false,
+        engine_id: ttsEntity, language,
+        ...(voice ? { options: { voice } } : {}), message, cache: false,
       })
       if (!/^\/api\/tts_proxy\/[A-Za-z0-9._-]+$/.test(result.path ?? '')) {
         throw new Error('Piper a renvoyé un chemin audio inattendu')

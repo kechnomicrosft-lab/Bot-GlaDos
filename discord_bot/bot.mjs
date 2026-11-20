@@ -28,11 +28,14 @@ const pendingMessages = new Set()
 const channelQueues = new Map()
 const channelSessions = new Map()
 const textSessions = new Map()
-const sessionDuration = 3 * 60 * 1000
+const sessionDuration = (options.context_minutes ?? 3) * 60 * 1000
+const contextEntries = options.context_entries ?? 6
+const textChannels = new Set((options.text_channel_ids ?? '').split(/[\s,]+/).filter(Boolean))
+const acceptsText = (channelId, parentId) => !textChannels.size || textChannels.has(channelId) || textChannels.has(parentId)
 
 function rememberSession(sessions, key, history) {
   sessions.delete(key)
-  sessions.set(key, { history: history.slice(-6), expires: Date.now() + sessionDuration })
+  sessions.set(key, { history: history.slice(-contextEntries), expires: Date.now() + sessionDuration })
   if (sessions.size > 256) sessions.delete(sessions.keys().next().value)
 }
 const commands = [
@@ -62,7 +65,7 @@ client.once(Events.ClientReady, async (readyClient) => {
 
 client.on(Events.VoiceStateUpdate, (before, after) => voice.updateState(before, after, client.user.id))
 client.on(Events.MessageCreate, (message) => {
-  if (message.guildId !== guildId || message.author.bot || message.webhookId || !assist.available) return
+  if (message.guildId !== guildId || message.author.bot || message.webhookId || !assist.available || !acceptsText(message.channelId, message.channel?.parentId)) return
   if (!analyzeServerMessages) {
     void processMessage(message).catch(() => console.error('Traitement du message Discord impossible.'))
     return
@@ -106,15 +109,18 @@ async function processMessage(message) {
   if (!analyzeServerMessages) pendingMessages.add(key)
   const showTyping = () => void message.channel.sendTyping().catch(() => {})
   const showWhileWaiting = direct || addressedByName || !analyzeServerMessages
-  if (showWhileWaiting) showTyping()
-  const typing = showWhileWaiting ? setInterval(showTyping, 8000) : null
+  if (options.show_typing !== false && showWhileWaiting) showTyping()
+  const typing = options.show_typing !== false && showWhileWaiting ? setInterval(showTyping, 8000) : null
   try {
-    const imageOnly = hasImage && (!input || /^glados[\s,.!?:;…—-]*$/iu.test(input))
-    const prompt = analyzeServerMessages ? input || (hasImage ? '[image seule]' : '[message sans texte]')
+    const imageOnly = options.analyze_images !== false && hasImage && (!input || /^glados[\s,.!?:;…—-]*$/iu.test(input))
+    const caption = analyzeServerMessages ? input || (hasImage ? '[image seule]' : '[message sans texte]')
       : imageOnly ? 'Regarde cette image. Décris ce que tu vois.' : input || 'GLaDOS, tu es là ?'
+    const prompt = options.analyze_images === false && hasImage
+      ? caption + ' [Une image est jointe. Son analyse est désactivée.]'
+      : caption
     const routing = { addressed: direct, author: message.author.displayName }
     const turn = { role: 'user', text: prompt, ...(analyzeServerMessages ? { author: routing.author } : {}) }
-    const decision = await withDiscordImages(message.attachments, async (images) => {
+    const decision = await withDiscordImages(options.analyze_images === false ? new Map() : message.attachments, async (images) => {
       if (analyzeServerMessages) return assist.respondInContext(prompt, history, images, routing)
       if (direct || (imageOnly && images.length)) return { text: await assist.reply(prompt, history, undefined, images) }
       return assist.respondInContext(prompt, history, images)
@@ -133,7 +139,7 @@ async function processMessage(message) {
     const imageError = /^(InvalidDiscordImage(?:Url)?|UnsupportedDiscordImage|DiscordImageTooLarge)$/.test(error?.message)
     const detail = code || (imageError ? error.message : error?.name)
     console.error('Échec du traitement Discord (' + (hasImage ? 'image' : 'texte') + ') : ' + (detail || 'inconnu'))
-    if (hasImage && (direct || addressedByName || !analyzeServerMessages)) {
+    if (options.analyze_images !== false && hasImage && (direct || addressedByName || !analyzeServerMessages)) {
       await message.reply('Je n’ai pas pu analyser cette image. Le fichier ou le fournisseur IA a refusé le traitement.').catch(() => {})
     } else if (direct) {
       await message.reply('Un petit incident de laboratoire. Réessaie dans un instant.').catch(() => {})
@@ -154,6 +160,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 
     if (interaction.commandName === 'glados') {
+      if (!acceptsText(interaction.channelId, interaction.channel?.parentId)) {
+        await interaction.reply({ content: 'Ce salon est hors du périmètre de discussion.', ephemeral: true })
+        return
+      }
       if (!assist.available) {
         await interaction.reply({ content: 'Configure une entité AI Task dans Home Assistant.', ephemeral: true })
         return
