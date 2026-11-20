@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { ChannelType, Client, Events, GatewayIntentBits, Routes } from 'discord.js'
 import { createAssist } from './assist.mjs'
 import { createVoice } from './voice.mjs'
+import { withDiscordImages } from './images.mjs'
 
 const options = JSON.parse(await readFile('/data/options.json', 'utf8'))
 const token = options.discord_token?.trim()
@@ -78,12 +79,18 @@ client.on(Events.MessageCreate, async (message) => {
 
   const text = message.content.replace(mention, '').trim()
   const input = (addressedByName ? text.replace(name, '').replace(/^[\s,.!?:;…—-]+/u, '') : text).trim().slice(0, 1600)
-  if (!direct && !input) return
+  if (!direct && !input && !message.attachments.size) return
 
   pendingMessages.add(key)
+  const showTyping = () => void message.channel.sendTyping().catch(() => {})
+  showTyping()
+  const typing = setInterval(showTyping, 8000)
   try {
-    const prompt = input || 'GLaDOS, tu es là ?'
-    const decision = direct ? { text: await assist.reply(prompt, history) } : await assist.respondInContext(prompt, history)
+    const prompt = input || (message.attachments.size ? 'Regarde ce que je viens de joindre.' : 'GLaDOS, tu es là ?')
+    const decision = await withDiscordImages(message.attachments, async (images) => (
+      direct ? { text: await assist.reply(prompt, history, undefined, images) }
+        : await assist.respondInContext(prompt, history, images)
+    ))
     if (!decision) return
     if (decision.emoji) await message.react(decision.emoji)
     else await message.reply(decision.text)
@@ -96,6 +103,7 @@ client.on(Events.MessageCreate, async (message) => {
     console.error('Échec du traitement de la conversation Discord.')
     if (direct) await message.reply('Un petit incident de laboratoire. Réessaie dans un instant.').catch(() => {})
   } finally {
+    clearInterval(typing)
     pendingMessages.delete(key)
   }
 })

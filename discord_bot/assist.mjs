@@ -17,9 +17,10 @@ export function createAssist({ ai_task_entity: aiTask, assist_pipeline: pipeline
   return {
     available: Boolean(token && /^ai_task\.[a-z0-9_]+$/.test(aiTask ?? "")),
     canTranscribe: Boolean(pipeline),
-    async reply(text, history = [], signal) {
+    async reply(text, history = [], signal, attachments = []) {
       const result = await request('/api/services/ai_task/generate_data?return_response', signal, {
         entity_id: aiTask,
+        ...(attachments.length ? { attachments } : {}),
         task_name: 'GLaDOS Discord chat',
         instructions: [
           'Incarne GLaDOS. Réponds naturellement en français, avec un sarcasme mesuré.',
@@ -33,9 +34,10 @@ export function createAssist({ ai_task_entity: aiTask, assist_pipeline: pipeline
       if (!speech) throw new Error('AI Task sans réponse')
       return speech
     },
-    async respondInContext(text, history) {
+    async respondInContext(text, history, attachments = []) {
       const result = await request('/api/services/ai_task/generate_data?return_response', undefined, {
         entity_id: aiTask,
+        ...(attachments.length ? { attachments } : {}),
         task_name: 'GLaDOS Discord follow-up',
         instructions: [
           'Tu incarnes GLaDOS dans Discord. Décide à qui le dernier message est adressé.',

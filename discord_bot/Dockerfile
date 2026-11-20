@@ -7,6 +7,6 @@ RUN apt-get update \
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci --omit=dev --no-audit --no-fund
-COPY bot.mjs assist.mjs voice.mjs ./
+COPY bot.mjs assist.mjs voice.mjs images.mjs ./
 
 CMD ["node", "bot.mjs"]
