@@ -15,21 +15,25 @@ if (!token || !/^\d{17,20}$/.test(guildId ?? '')) {
 
 const assist = createAssist(options, process.env.SUPERVISOR_TOKEN)
 const voice = createVoice(assist)
+const analyzeServerMessages = options.analyze_server_messages === true
+const readMessageContent = analyzeServerMessages || options.natural_text_triggers
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildVoiceStates,
-    ...(options.natural_text_triggers ? [GatewayIntentBits.MessageContent] : []),
+    ...(readMessageContent ? [GatewayIntentBits.MessageContent] : []),
   ],
   allowedMentions: { parse: [], repliedUser: false },
 })
 const pendingMessages = new Set()
+const channelQueues = new Map()
+const channelSessions = new Map()
 const textSessions = new Map()
 const sessionDuration = 3 * 60 * 1000
 
-function rememberTextSession(key, history) {
-  textSessions.delete(key)
-  textSessions.set(key, { history: history.slice(-6), expires: Date.now() + sessionDuration })
-  if (textSessions.size > 256) textSessions.delete(textSessions.keys().next().value)
+function rememberSession(sessions, key, history) {
+  sessions.delete(key)
+  sessions.set(key, { history: history.slice(-6), expires: Date.now() + sessionDuration })
+  if (sessions.size > 256) sessions.delete(sessions.keys().next().value)
 }
 const commands = [
   { name: 'ping', description: 'Vérifie que le bot répond.' },
@@ -57,48 +61,71 @@ client.once(Events.ClientReady, async (readyClient) => {
 })
 
 client.on(Events.VoiceStateUpdate, (before, after) => voice.updateState(before, after, client.user.id))
-client.on(Events.MessageCreate, async (message) => {
+client.on(Events.MessageCreate, (message) => {
   if (message.guildId !== guildId || message.author.bot || message.webhookId || !assist.available) return
+  if (!analyzeServerMessages) {
+    void processMessage(message).catch(() => console.error('Traitement du message Discord impossible.'))
+    return
+  }
+
+  const key = message.channelId
+  const pending = channelQueues.get(key) ?? Promise.resolve()
+  const next = pending.then(() => processMessage(message))
+    .catch(() => console.error('Traitement du message Discord impossible.'))
+    .finally(() => {
+      if (channelQueues.get(key) === next) channelQueues.delete(key)
+    })
+  channelQueues.set(key, next)
+})
+
+async function processMessage(message) {
   const mention = new RegExp('<@!?' + client.user.id + '>')
   const name = /(?<![\p{L}\p{N}_])glados(?![\p{L}\p{N}_])/iu
-  const addressedByName = options.natural_text_triggers && name.test(message.content)
+  const addressedByName = readMessageContent && name.test(message.content)
   const mentioned = mention.test(message.content)
-  const key = message.channelId + ':' + message.author.id
-  const previous = textSessions.get(key)
+  const key = analyzeServerMessages ? message.channelId : message.channelId + ':' + message.author.id
+  const sessions = analyzeServerMessages ? channelSessions : textSessions
+  const previous = sessions.get(key)
   const history = previous?.expires > Date.now() ? previous.history : []
-  if (previous && !history.length) textSessions.delete(key)
+  if (previous && !history.length) sessions.delete(key)
 
   const hasImage = message.attachments.some((attachment) => attachment.contentType?.startsWith('image/'))
-  let direct = addressedByName || mentioned
-  if (!direct && options.natural_text_triggers && message.reference?.messageId) {
+  let direct = mentioned || (!analyzeServerMessages && addressedByName)
+  if (!direct && readMessageContent && message.reference?.messageId) {
     const referenced = await message.fetchReference().catch(() => null)
-    if (referenced?.author.id !== client.user.id) return
-    direct = true
+    direct = referenced?.author.id === client.user.id
+    if (!direct && !analyzeServerMessages) return
   }
-  if (!direct && (!options.natural_text_triggers || !history.length || message.mentions.users.size)) return
-  if (pendingMessages.has(key) || pendingMessages.size >= 4) return
+  if (!analyzeServerMessages && !direct && (!options.natural_text_triggers || !history.length || message.mentions.users.size)) return
+  if (!analyzeServerMessages && (pendingMessages.has(key) || pendingMessages.size >= 4)) return
 
   const text = message.content.replace(mention, '').trim()
   const input = text.slice(0, 1600)
-  if (!direct && !input && !message.attachments.size) return
+  if (!analyzeServerMessages && !direct && !input && !message.attachments.size) return
 
-  pendingMessages.add(key)
+  if (!analyzeServerMessages) pendingMessages.add(key)
   const showTyping = () => void message.channel.sendTyping().catch(() => {})
-  showTyping()
-  const typing = setInterval(showTyping, 8000)
+  const showWhileWaiting = direct || addressedByName || !analyzeServerMessages
+  if (showWhileWaiting) showTyping()
+  const typing = showWhileWaiting ? setInterval(showTyping, 8000) : null
   try {
     const imageOnly = hasImage && (!input || /^glados[\s,.!?:;…—-]*$/iu.test(input))
-    const prompt = imageOnly ? 'Regarde cette image. Décris ce que tu vois.' : input || 'GLaDOS, tu es là ?'
-    const decision = await withDiscordImages(message.attachments, async (images) => (
-      direct || (imageOnly && images.length) ? { text: await assist.reply(prompt, history, undefined, images) }
-        : await assist.respondInContext(prompt, history, images)
-    ))
+    const prompt = analyzeServerMessages ? input || (hasImage ? '[image seule]' : '[message sans texte]')
+      : imageOnly ? 'Regarde cette image. Décris ce que tu vois.' : input || 'GLaDOS, tu es là ?'
+    const routing = { addressed: direct, author: message.author.displayName }
+    const turn = { role: 'user', text: prompt, ...(analyzeServerMessages ? { author: routing.author } : {}) }
+    const decision = await withDiscordImages(message.attachments, async (images) => {
+      if (analyzeServerMessages) return assist.respondInContext(prompt, history, images, routing)
+      if (direct || (imageOnly && images.length)) return { text: await assist.reply(prompt, history, undefined, images) }
+      return assist.respondInContext(prompt, history, images)
+    })
+    if (analyzeServerMessages) rememberSession(sessions, key, [...history, turn])
     if (!decision) return
     if (decision.emoji) await message.react(decision.emoji)
     else await message.reply(decision.text)
-    rememberTextSession(key, [
+    rememberSession(sessions, key, [
       ...history,
-      { role: 'user', text: prompt },
+      turn,
       { role: 'assistant', text: decision.text ?? decision.emoji },
     ])
   } catch (error) {
@@ -106,7 +133,7 @@ client.on(Events.MessageCreate, async (message) => {
     const imageError = /^(InvalidDiscordImage(?:Url)?|UnsupportedDiscordImage|DiscordImageTooLarge)$/.test(error?.message)
     const detail = code || (imageError ? error.message : error?.name)
     console.error('Échec du traitement Discord (' + (hasImage ? 'image' : 'texte') + ') : ' + (detail || 'inconnu'))
-    if (hasImage) {
+    if (hasImage && (direct || addressedByName || !analyzeServerMessages)) {
       await message.reply('Je n’ai pas pu analyser cette image. Le fichier ou le fournisseur IA a refusé le traitement.').catch(() => {})
     } else if (direct) {
       await message.reply('Un petit incident de laboratoire. Réessaie dans un instant.').catch(() => {})
@@ -115,7 +142,7 @@ client.on(Events.MessageCreate, async (message) => {
     clearInterval(typing)
     pendingMessages.delete(key)
   }
-})
+}
 
 client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.isChatInputCommand() || interaction.guildId !== guildId) return

@@ -39,20 +39,22 @@ export function createAssist({ ai_task_entity: aiTask, assist_pipeline: pipeline
       if (!speech) throw new Error('AI Task sans réponse')
       return speech
     },
-    async respondInContext(text, history, attachments = []) {
+    async respondInContext(text, history, attachments = [], routing = {}) {
       const result = await request('/api/services/ai_task/generate_data?return_response', undefined, {
         entity_id: aiTask,
         ...(attachments.length ? { attachments } : {}),
         task_name: 'GLaDOS Discord follow-up',
         instructions: [
           'Tu incarnes GLaDOS dans Discord. Décide à qui le dernier message est adressé.',
-          'Le même utilisateur te parlait récemment. Une réponse directe, une référence à ta dernière phrase ou une taquinerie à ton sujet peut continuer la discussion.',
+          'Le contexte peut contenir plusieurs personnes. Distingue leurs échanges des messages réellement destinés à GLaDOS.',
+          'Réponds aux sollicitations claires, aux suites de ton échange et aux images qui te sont adressées. Ignore le bavardage entre humains.',
+          'Le signal addressed indique une mention explicite ou une réponse Discord à ton message. Si ce signal est vrai, réponds ou réagis.',
           'Exemple : après ta réponse, "je te débrancherai un jour" te vise. Si le message parle à quelqu’un d’autre ou reste ambigu, ignore-le.',
           'Pour une taquinerie qui ne demande rien, tu peux réagir avec un emoji. Sinon, réponds brièvement en français, naturellement, avec un sarcasme mesuré.',
           'Tu ne peux effectuer aucune action domotique.',
           'Retourne uniquement un objet JSON : {"action":"ignore"}, {"action":"react","emoji":"🙄"} ou {"action":"reply","text":"..."}',
           'Réactions autorisées : 🙄, 😏, 👀, 😂, 🤨, 👍.',
-          JSON.stringify([...history, { role: 'user', text }]),
+          JSON.stringify({ history, latest: { role: 'user', text, ...routing } }),
         ].join('\n'),
       })
       const raw = result.service_response?.data

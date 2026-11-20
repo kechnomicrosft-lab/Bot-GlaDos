@@ -1,5 +1,5 @@
 name: "Discord Bot Host"
-version: "0.2.8"
+version: "0.2.9"
 slug: discord_bot
 description: "Bot Discord avec conversation et voix GLaDOS via Home Assistant."
 arch:
@@ -18,9 +18,11 @@ options:
   ai_task_entity: ""
   assist_pipeline: ""
   natural_text_triggers: false
+  analyze_server_messages: false
 schema:
   discord_token: password
   guild_id: str
   ai_task_entity: str?
   assist_pipeline: str?
   natural_text_triggers: bool
+  analyze_server_messages: bool
