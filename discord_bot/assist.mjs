@@ -10,7 +10,12 @@ export function createAssist({ ai_task_entity: aiTask, assist_pipeline: pipeline
       body: body && JSON.stringify(body),
       signal: AbortSignal.any([AbortSignal.timeout(35000), ...(signal ? [signal] : [])]),
     })
-    if (!response.ok) throw new Error('Home Assistant ' + path.split('?')[0].replace(/^\/api\/tts_proxy\/.+$/, '/api/tts_proxy') + ' HTTP ' + response.status)
+    if (!response.ok) {
+      const name = path.startsWith('/api/services/ai_task/') ? 'Home Assistant AI Task' : 'Home Assistant'
+      const error = new Error(name + ' HTTP ' + response.status)
+      error.code = 'HomeAssistantHttp' + response.status
+      throw error
+    }
     return response[responseType]()
   }
 

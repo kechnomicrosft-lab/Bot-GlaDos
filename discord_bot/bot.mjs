@@ -101,8 +101,11 @@ client.on(Events.MessageCreate, async (message) => {
       { role: 'user', text: prompt },
       { role: 'assistant', text: decision.text ?? decision.emoji },
     ])
-  } catch {
-    console.error('Échec du traitement de la conversation Discord.')
+  } catch (error) {
+    const code = typeof error?.code === 'string' && /^[A-Za-z0-9_]+$/.test(error.code) ? error.code : null
+    const imageError = /^(InvalidDiscordImage(?:Url)?|UnsupportedDiscordImage|DiscordImageTooLarge)$/.test(error?.message)
+    const detail = code || (imageError ? error.message : error?.name)
+    console.error('Échec du traitement Discord (' + (hasImage ? 'image' : 'texte') + ') : ' + (detail || 'inconnu'))
     if (hasImage) {
       await message.reply('Je n’ai pas pu analyser cette image. Le fichier ou le fournisseur IA a refusé le traitement.').catch(() => {})
     } else if (direct) {
