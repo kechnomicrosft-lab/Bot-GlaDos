@@ -15,7 +15,10 @@ if (!token || !/^\d{17,20}$/.test(guildId ?? '')) {
 const assist = createAssist(options, process.env.SUPERVISOR_TOKEN)
 const voice = createVoice(assist)
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildVoiceStates],
+  intents: [
+    GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildVoiceStates,
+    ...(options.natural_text_triggers ? [GatewayIntentBits.MessageContent] : []),
+  ],
   allowedMentions: { parse: [], repliedUser: false },
 })
 const pendingMessages = new Set()
@@ -48,10 +51,19 @@ client.on(Events.VoiceStateUpdate, (before, after) => voice.updateState(before, 
 client.on(Events.MessageCreate, async (message) => {
   if (message.guildId !== guildId || message.author.bot || message.webhookId || !assist.available) return
   const mention = new RegExp('<@!?' + client.user.id + '>')
-  if (!mention.test(message.content)) return
+  const name = /^(?:(?:salut|bonjour|bonsoir|hey|coucou)[\s,]+)?glados(?=$|[\s,.!?:;…—-])/iu
+  const addressedByName = options.natural_text_triggers && name.test(message.content)
+  const mentioned = mention.test(message.content)
+  if (!addressedByName && !mentioned) {
+    if (!options.natural_text_triggers || !message.reference?.messageId) return
+    const referenced = await message.fetchReference().catch(() => null)
+    if (referenced?.author.id !== client.user.id) return
+  }
+  if (pendingMessages.has(message.author.id) || pendingMessages.size >= 4) return
 
-  const input = message.content.replace(mention, '').trim().slice(0, 1600)
-  if (!input || pendingMessages.has(message.author.id) || pendingMessages.size >= 4) return
+  const text = message.content.replace(mention, '').trim()
+  const input = (addressedByName ? text.replace(name, '').replace(/^[\s,.!?:;…—-]+/u, '') : text).trim().slice(0, 1600)
+    || 'GLaDOS, tu es là ?'
 
   pendingMessages.add(message.author.id)
   try {

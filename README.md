@@ -15,3 +15,6 @@ Les réglages et le jeton Discord sont saisis dans Home Assistant. Le bot utilis
 ## Versions
 
 Une modification de `discord_bot/` sur `main` lance les contrôles JavaScript et la construction de l’image multiarchitecture sur GitHub Actions. Augmente `version` dans `discord_bot/config.yaml` pour chaque mise à jour distribuée. Le Supervisor utilise le Dockerfile du dépôt pour construire le conteneur. Le package GHCR est publié en parallèle.
+## Parler sans commande
+
+Active **Message Content Intent** dans le portail développeur Discord, section **Bot**, puis active `natural_text_triggers` dans les réglages de Discord Bot Host et redémarre le bot. Écris « GLaDOS, tu en penses quoi ? » ou réponds directement à un message du bot. Les conversations entre humains restent silencieuses. Les mentions directes et les commandes restent disponibles. Tous les membres ayant accès au salon peuvent solliciter le bot.
