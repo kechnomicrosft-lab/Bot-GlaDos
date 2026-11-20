@@ -1,5 +1,5 @@
 name: "Discord Bot Host"
-version: "0.2.1"
+version: "0.2.2"
 slug: discord_bot
 description: "Bot Discord avec conversation et voix GLaDOS via Home Assistant."
 arch:
@@ -14,8 +14,10 @@ options:
   guild_id: ""
   conversation_agent: ""
   assist_pipeline: ""
+  allowed_discord_users: ""
 schema:
   discord_token: password
   guild_id: str
   conversation_agent: str?
   assist_pipeline: str?
+  allowed_discord_users: str?

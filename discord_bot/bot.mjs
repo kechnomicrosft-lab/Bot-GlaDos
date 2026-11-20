@@ -18,6 +18,9 @@ const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildVoiceStates],
   allowedMentions: { parse: [], repliedUser: false },
 })
+const allowedUsers = new Set(
+  String(options.allowed_discord_users ?? '').split(/[\s,]+/).filter((id) => /^\d{17,20}$/.test(id)),
+)
 const pendingMessages = new Set()
 const commands = [
   { name: 'ping', description: 'Vérifie que le bot répond.' },
@@ -46,7 +49,7 @@ client.once(Events.ClientReady, async (readyClient) => {
 
 client.on(Events.VoiceStateUpdate, (before, after) => voice.updateState(before, after, client.user.id))
 client.on(Events.MessageCreate, async (message) => {
-  if (message.guildId !== guildId || message.author.bot || message.webhookId || !assist.available) return
+  if (message.guildId !== guildId || message.author.bot || message.webhookId || !allowedUsers.has(message.author.id) || !assist.available) return
   const mention = new RegExp('<@!?' + client.user.id + '>')
   if (!mention.test(message.content)) return
 
@@ -71,6 +74,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
   try {
     if (interaction.commandName === 'ping') {
       await interaction.reply('Pong !')
+      return
+    }
+
+    if (!allowedUsers.has(interaction.user.id)) {
+      await interaction.reply({ content: 'Accès à GLaDOS réservé aux utilisateurs autorisés.', ephemeral: true })
       return
     }
 
