@@ -15,12 +15,12 @@ if (!token || !/^\d{17,20}$/.test(guildId ?? '')) {
 const assist = createAssist(options, process.env.SUPERVISOR_TOKEN)
 const voice = createVoice(assist)
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildVoiceStates],
+  intents: [
+    GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildVoiceStates,
+    ...(options.natural_text_triggers ? [GatewayIntentBits.MessageContent] : []),
+  ],
   allowedMentions: { parse: [], repliedUser: false },
 })
-const allowedUsers = new Set(
-  String(options.allowed_discord_users ?? '').split(/[\s,]+/).filter((id) => /^\d{17,20}$/.test(id)),
-)
 const pendingMessages = new Set()
 const commands = [
   { name: 'ping', description: 'Vérifie que le bot répond.' },
@@ -49,12 +49,21 @@ client.once(Events.ClientReady, async (readyClient) => {
 
 client.on(Events.VoiceStateUpdate, (before, after) => voice.updateState(before, after, client.user.id))
 client.on(Events.MessageCreate, async (message) => {
-  if (message.guildId !== guildId || message.author.bot || message.webhookId || !allowedUsers.has(message.author.id) || !assist.available) return
+  if (message.guildId !== guildId || message.author.bot || message.webhookId || !assist.available) return
   const mention = new RegExp('<@!?' + client.user.id + '>')
-  if (!mention.test(message.content)) return
+  const name = /^(?:(?:salut|bonjour|bonsoir|hey|coucou)[\s,]+)?glados(?=$|[\s,.!?:;…—-])/iu
+  const addressedByName = options.natural_text_triggers && name.test(message.content)
+  const mentioned = mention.test(message.content)
+  if (!addressedByName && !mentioned) {
+    if (!options.natural_text_triggers || !message.reference?.messageId) return
+    const referenced = await message.fetchReference().catch(() => null)
+    if (referenced?.author.id !== client.user.id) return
+  }
+  if (pendingMessages.has(message.author.id) || pendingMessages.size >= 4) return
 
-  const input = message.content.replace(mention, '').trim().slice(0, 1600)
-  if (!input || pendingMessages.has(message.author.id) || pendingMessages.size >= 4) return
+  const text = message.content.replace(mention, '').trim()
+  const input = (addressedByName ? text.replace(name, '').replace(/^[\s,.!?:;…—-]+/u, '') : text).trim().slice(0, 1600)
+    || 'GLaDOS, tu es là ?'
 
   pendingMessages.add(message.author.id)
   try {
@@ -74,11 +83,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
   try {
     if (interaction.commandName === 'ping') {
       await interaction.reply('Pong !')
-      return
-    }
-
-    if (!allowedUsers.has(interaction.user.id)) {
-      await interaction.reply({ content: 'Accès à GLaDOS réservé aux utilisateurs autorisés.', ephemeral: true })
       return
     }
 
