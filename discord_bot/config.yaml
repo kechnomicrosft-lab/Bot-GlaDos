@@ -1,6 +1,5 @@
 name: "Discord Bot Host"
-version: "0.2.0"
-image: "ghcr.io/kechnomicrosft-lab/bot-glados"
+version: "0.2.1"
 slug: discord_bot
 description: "Bot Discord avec conversation et voix GLaDOS via Home Assistant."
 arch:

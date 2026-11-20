@@ -37,7 +37,7 @@ jobs:
         id: app
         run: |
           echo "version=$(sed -nE 's/^version: \"([0-9]+\.[0-9]+\.[0-9]+)\"$/\1/p' config.yaml)" >> "$GITHUB_OUTPUT"
-          echo "image=$(sed -nE 's/^image: \"(ghcr\.io\/[a-z0-9_./-]+)\"$/\1/p' config.yaml)" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/kechnomicrosft-lab/bot-glados" >> "$GITHUB_OUTPUT"
       - name: Verify release metadata
         if: steps.app.outputs.version == '' || steps.app.outputs.image == ''
         run: exit 1

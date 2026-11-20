@@ -14,4 +14,4 @@ Les réglages et le jeton Discord sont saisis dans Home Assistant. Le bot utilis
 
 ## Versions
 
-Une modification de `discord_bot/` sur `main` lance les contrôles JavaScript et la construction de l’image multiarchitecture sur GitHub Actions. Augmente `version` dans `discord_bot/config.yaml` pour chaque mise à jour distribuée. Le Supervisor télécharge l’image GHCR portant ce numéro quand la construction est terminée.
+Une modification de `discord_bot/` sur `main` lance les contrôles JavaScript et la construction de l’image multiarchitecture sur GitHub Actions. Augmente `version` dans `discord_bot/config.yaml` pour chaque mise à jour distribuée. Le Supervisor utilise le Dockerfile du dépôt pour construire le conteneur. Le package GHCR est publié en parallèle.
